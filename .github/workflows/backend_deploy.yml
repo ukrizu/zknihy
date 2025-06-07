@@ -91,7 +91,7 @@ jobs:
         rm rosti.nginx.conf
     - name: Backend - Copy code
       run: |
-        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git .-zknihy $USER@$HOST:/srv/app/zknihy
+        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git ./zknihy $USER@$HOST:/srv/app/zknihy
     - name: Apply changes
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
