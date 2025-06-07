@@ -95,7 +95,7 @@ jobs:
     - name: Apply changes
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
-        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart app
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart api
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart nginx
 
     # - name: Frontend - Copy code
