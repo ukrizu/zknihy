@@ -26,12 +26,6 @@ jobs:
     - name: Setup hostkey
       run: |
         echo "ssh.rosti.cz ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC++6Rv0ht280ZlxvrJ23irzUXFV0c0Ib2tiUEy6yRrnG3V6BotklNyc4XBvyzNsgoRUmMGlHSsAEsTD5tKQIQQkVzpRvdLgEyjvD823qJufNvnilaawMEtNVbdPXAQIqd29/WcDJXZhxIPoY02/dCrU+dV+7VJdZnYqQGSBf2aNkM9EzNnxYQR5hHikgoW0Oz+f8Br/L4cBfiFN67dck+GmmwhNpQae+suy988C1dVqBrAjfkcdWRfX8QXBoX3/PyYqW9CYi5n4KoMPvwnBhwH0BSkJZoDMa89aNaTYE/rr8tsRCr049BE8mbxo2ca+HFpLRwFUDKeamonZB3CMtmB" > ./known_hosts
-    - name: Setup Node.js
-      run: |
-        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST /usr/local/bin/rosti node $NODE_VERSION
-    - name: Backend - Copy code
-      run: |
-        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git . $USER@$HOST:/srv/app/
     - name: Backend - Install Dependencies
       working-directory: zknihy
       run: |
@@ -40,6 +34,9 @@ jobs:
       working-directory: zknihy
       run: |
         npm run build
+    - name: Setup Node.js
+      run: |
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST /usr/local/bin/rosti node $NODE_VERSION
     - name: Backend - Setup Supervisord
       run: |
         cat << EOF > rosti.app.conf
@@ -92,6 +89,9 @@ jobs:
         EOF
         scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.nginx.conf $USER@$HOST:/srv/conf/nginx.d/app.conf
         rm rosti.nginx.conf
+    - name: Backend - Copy code
+      run: |
+        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git . $USER@$HOST:/srv/app/
     - name: Apply changes
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
