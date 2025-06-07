@@ -26,57 +26,14 @@ jobs:
     - name: Setup hostkey
       run: |
         echo "ssh.rosti.cz ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC++6Rv0ht280ZlxvrJ23irzUXFV0c0Ib2tiUEy6yRrnG3V6BotklNyc4XBvyzNsgoRUmMGlHSsAEsTD5tKQIQQkVzpRvdLgEyjvD823qJufNvnilaawMEtNVbdPXAQIqd29/WcDJXZhxIPoY02/dCrU+dV+7VJdZnYqQGSBf2aNkM9EzNnxYQR5hHikgoW0Oz+f8Br/L4cBfiFN67dck+GmmwhNpQae+suy988C1dVqBrAjfkcdWRfX8QXBoX3/PyYqW9CYi5n4KoMPvwnBhwH0BSkJZoDMa89aNaTYE/rr8tsRCr049BE8mbxo2ca+HFpLRwFUDKeamonZB3CMtmB" > ./known_hosts
-    - name: Frontend - Copy code
-      run: |
-        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git ./zknihy-storefront/ $USER@$HOST:/srv/app/
-    - name: Backend - Copy code
-      run: |
-        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git ./zknihy/ $USER@$HOST:/srv/app/
-    - name: env
-      working-directory: zknihy-storefront
-      run: |
-        cat << EOF > .env
-        ${{ secrets.ENV }}
-        EOF
-    - name: Frontend - Install Dependencies
-      working-directory: zknihy-storefront
-      run: |
-        npm install
-    - name: Frontend - Build
-      working-directory: zknihy-storefront
-      run: |
-        npm run build
-    - name: Backend - Install Dependencies
-      working-directory: zknihy
-      run: |
-        npm install
-    - name: Backend - Build
-      working-directory: zknihy
-      run: |
-        npm run build
     - name: Setup Node.js
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST /usr/local/bin/rosti node $NODE_VERSION
-    - name: Setup Supervisord
+    - name: Backend - Copy code
       run: |
-        cat << EOF > rosti.app.conf
-        [program:app]
-        command=/srv/bin/primary_tech/npm start
-        environment=PATH="/srv/bin/primary_tech:/usr/local/bin:/usr/bin:/bin:/srv/.npm-packages/bin"
-        stopasgroup=true
-        directory=/srv/app/zknihy-storefront
-        process_name=app
-        autostart=true
-        autorestart=true
-        stdout_logfile=/srv/log/app.log
-        stdout_logfile_maxbytes=2MB
-        stdout_logfile_backups=5
-        stdout_capture_maxbytes=2MB
-        stdout_events_enabled=false
-        redirect_stderr=true
-        EOF
-        scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.app.conf $USER@$HOST:/srv/conf/supervisor.d/app.conf
-        rm rosti.app.conf
+        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git ./zknihy/ $USER@$HOST:/srv/app/
+    - name: Backend - Setup Supervisord
+      run: |
         cat << EOF > rosti.app.conf
         [program:api]
         command=/srv/bin/primary_tech/npm start
@@ -127,6 +84,63 @@ jobs:
         EOF
         scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.nginx.conf $USER@$HOST:/srv/conf/nginx.d/app.conf
         rm rosti.nginx.conf
+    - name: Apply changes
+      run: |
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart app
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart nginx
+
+    - name: Frontend - Copy code
+      run: |
+        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git ./zknihy-storefront/ $USER@$HOST:/srv/app/
+    - name: env
+      working-directory: zknihy-storefront
+      run: |
+        cat << EOF > .env
+        ${{ secrets.ENV }}
+        EOF
+    - name: Frontend - Install Dependencies
+      working-directory: zknihy-storefront
+      run: |
+        npm install
+    - name: Ensure backend running
+      run: |
+        until curl -s http://api.zknihy.rostiapp.com/store/products; do
+          echo "Waiting for backend..."
+          sleep 3
+        done
+    - name: Frontend - Build
+      working-directory: zknihy-storefront
+      run: |
+        npm run build
+    - name: Backend - Install Dependencies
+      working-directory: zknihy
+      run: |
+        npm install
+    - name: Backend - Build
+      working-directory: zknihy
+      run: |
+        npm run build
+    - name: Frontend - Setup Supervisord
+      run: |
+        cat << EOF > rosti.app.conf
+        [program:app]
+        command=/srv/bin/primary_tech/npm start
+        environment=PATH="/srv/bin/primary_tech:/usr/local/bin:/usr/bin:/bin:/srv/.npm-packages/bin"
+        stopasgroup=true
+        directory=/srv/app/zknihy-storefront
+        process_name=app
+        autostart=true
+        autorestart=true
+        stdout_logfile=/srv/log/app.log
+        stdout_logfile_maxbytes=2MB
+        stdout_logfile_backups=5
+        stdout_capture_maxbytes=2MB
+        stdout_events_enabled=false
+        redirect_stderr=true
+        EOF
+        scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.app.conf $USER@$HOST:/srv/conf/supervisor.d/app.conf
+        rm rosti.app.conf
     - name: Apply changes
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
