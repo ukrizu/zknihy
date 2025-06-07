@@ -39,7 +39,7 @@ jobs:
         ${{ secrets.ENV }}
         EOF
     - name: Frontend - Install Dependencies
-      working-directory: zknihy-storefornt
+      working-directory: zknihy-storefront
       run: |
         npm install
     - name: Frontend - Build
