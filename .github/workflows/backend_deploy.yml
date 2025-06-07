@@ -32,6 +32,14 @@ jobs:
     - name: Backend - Copy code
       run: |
         rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git ./zknihy/ $USER@$HOST:/srv/app/
+    - name: Backend - Install Dependencies
+      working-directory: zknihy
+      run: |
+        npm install
+    - name: Backend - Build
+      working-directory: zknihy
+      run: |
+        npm run build
     - name: Backend - Setup Supervisord
       run: |
         cat << EOF > rosti.app.conf
@@ -111,14 +119,6 @@ jobs:
         done
     - name: Frontend - Build
       working-directory: zknihy-storefront
-      run: |
-        npm run build
-    - name: Backend - Install Dependencies
-      working-directory: zknihy
-      run: |
-        npm install
-    - name: Backend - Build
-      working-directory: zknihy
       run: |
         npm run build
     - name: Frontend - Setup Supervisord
