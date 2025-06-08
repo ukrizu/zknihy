@@ -92,6 +92,13 @@ jobs:
     - name: Backend - Copy code
       run: |
         rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git . $USER@$HOST:/srv/app/
+    - name: Rename .env.production to .env on server
+      run: |
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST \
+          'mv /srv/app/zknihy/.env.production /srv/app/zknihy/.env'
+    - name: Run DB migrations and sync
+      run: |
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST "cd /srv/app/zknihy && npx medusa db:migrate && npx medusa db:sync-links"
     - name: Apply changes
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
