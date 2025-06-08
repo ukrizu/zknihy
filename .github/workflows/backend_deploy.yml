@@ -1,11 +1,9 @@
-# .github/workflows/rosti_deploy.yml
-
 name: Deploy into Roští.cz
 
 on:
   push:
     branches: [public]
-  workflow_dispatch:  # allows manual execution from GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -17,31 +15,41 @@ jobs:
       NODE_VERSION: 23.6.0
     steps:
     - uses: actions/checkout@v3
+
     - uses: actions/setup-node@v3
       with:
         node-version: "v23.6.0"
+
     - uses: webfactory/ssh-agent@v0.8.0
       with:
         ssh-private-key: ${{ secrets.ROSTI_DEPLOY_SSH_KEY }}
+
     - name: Setup hostkey
       run: |
         echo "ssh.rosti.cz ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC++6Rv0ht280ZlxvrJ23irzUXFV0c0Ib2tiUEy6yRrnG3V6BotklNyc4XBvyzNsgoRUmMGlHSsAEsTD5tKQIQQkVzpRvdLgEyjvD823qJufNvnilaawMEtNVbdPXAQIqd29/WcDJXZhxIPoY02/dCrU+dV+7VJdZnYqQGSBf2aNkM9EzNnxYQR5hHikgoW0Oz+f8Br/L4cBfiFN67dck+GmmwhNpQae+suy988C1dVqBrAjfkcdWRfX8QXBoX3/PyYqW9CYi5n4KoMPvwnBhwH0BSkJZoDMa89aNaTYE/rr8tsRCr049BE8mbxo2ca+HFpLRwFUDKeamonZB3CMtmB" > ./known_hosts
-    - name: Backend - Install Dependencies
-      working-directory: zknihy
+
+    - name: Backend - Copy code to server
       run: |
-        npm install
-    - name: Backend - Build
-      working-directory: zknihy
+        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git . $USER@$HOST:/srv/app/
+
+    - name: Install & Build on server
       run: |
-        npm run build
-    - name: Setup Node.js
+        ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST << EOF
+          export PATH="/srv/bin/primary_tech:/usr/local/bin:/usr/bin:/bin:/srv/.npm-packages/bin"
+          cd /srv/app/zknihy
+          npm install
+          npm run build
+        EOF
+
+    - name: Setup Node.js on server
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST /usr/local/bin/rosti node $NODE_VERSION
+
     - name: Backend - Setup Supervisord
       run: |
         cat << EOF > rosti.app.conf
         [program:api]
-        command=/srv/bin/primary_tech/npm start
+        command=npm start
         environment=PATH="/srv/bin/primary_tech:/usr/local/bin:/usr/bin:/bin:/srv/.npm-packages/bin"
         stopasgroup=true
         directory=/srv/app/zknihy
@@ -57,15 +65,14 @@ jobs:
         EOF
         scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.app.conf $USER@$HOST:/srv/conf/supervisor.d/api.conf
         rm rosti.app.conf
+
     - name: Setup Nginx
       run: |
         cat << EOF > rosti.nginx.conf
         server {
                 server_name zknihy.rostiapp.cz;
-
                 listen       0.0.0.0:8000;
                 listen       [::]:8000;
-
                 location / {
                         proxy_pass         http://127.0.0.1:3000/;
                         proxy_redirect     default;
@@ -75,10 +82,8 @@ jobs:
         }
         server {
                 server_name api-zknihy.rostiapp.cz;
-
                 listen       0.0.0.0:8000;
                 listen       [::]:8000;
-
                 location / {
                         proxy_pass         http://127.0.0.1:9000/;
                         proxy_redirect     default;
@@ -89,14 +94,112 @@ jobs:
         EOF
         scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.nginx.conf $USER@$HOST:/srv/conf/nginx.d/app.conf
         rm rosti.nginx.conf
-    - name: Backend - Copy code
-      run: |
-        rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git . $USER@$HOST:/srv/app/
+
     - name: Apply changes
       run: |
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart api
         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart nginx
+
+# # .github/workflows/rosti_deploy.yml
+
+# name: Deploy into Roští.cz
+
+# on:
+#   push:
+#     branches: [public]
+#   workflow_dispatch:  # allows manual execution from GitHub UI
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+#     env:
+#       HOST: ssh.rosti.cz
+#       USER: app
+#       PORT: 11242
+#       NODE_VERSION: 23.6.0
+#     steps:
+#     - uses: actions/checkout@v3
+#     - uses: actions/setup-node@v3
+#       with:
+#         node-version: "v23.6.0"
+#     - uses: webfactory/ssh-agent@v0.8.0
+#       with:
+#         ssh-private-key: ${{ secrets.ROSTI_DEPLOY_SSH_KEY }}
+#     - name: Setup hostkey
+#       run: |
+#         echo "ssh.rosti.cz ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC++6Rv0ht280ZlxvrJ23irzUXFV0c0Ib2tiUEy6yRrnG3V6BotklNyc4XBvyzNsgoRUmMGlHSsAEsTD5tKQIQQkVzpRvdLgEyjvD823qJufNvnilaawMEtNVbdPXAQIqd29/WcDJXZhxIPoY02/dCrU+dV+7VJdZnYqQGSBf2aNkM9EzNnxYQR5hHikgoW0Oz+f8Br/L4cBfiFN67dck+GmmwhNpQae+suy988C1dVqBrAjfkcdWRfX8QXBoX3/PyYqW9CYi5n4KoMPvwnBhwH0BSkJZoDMa89aNaTYE/rr8tsRCr049BE8mbxo2ca+HFpLRwFUDKeamonZB3CMtmB" > ./known_hosts
+#     - name: Backend - Install Dependencies
+#       working-directory: zknihy
+#       run: |
+#         npm install
+#     - name: Backend - Build
+#       working-directory: zknihy
+#       run: |
+#         npm run build
+#     - name: Setup Node.js
+#       run: |
+#         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST /usr/local/bin/rosti node $NODE_VERSION
+#     - name: Backend - Setup Supervisord
+#       run: |
+#         cat << EOF > rosti.app.conf
+#         [program:api]
+#         command=/srv/bin/primary_tech/npm start
+#         environment=PATH="/srv/bin/primary_tech:/usr/local/bin:/usr/bin:/bin:/srv/.npm-packages/bin"
+#         stopasgroup=true
+#         directory=/srv/app/zknihy
+#         process_name=api
+#         autostart=true
+#         autorestart=true
+#         stdout_logfile=/srv/log/api.log
+#         stdout_logfile_maxbytes=2MB
+#         stdout_logfile_backups=5
+#         stdout_capture_maxbytes=2MB
+#         stdout_events_enabled=false
+#         redirect_stderr=true
+#         EOF
+#         scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.app.conf $USER@$HOST:/srv/conf/supervisor.d/api.conf
+#         rm rosti.app.conf
+#     - name: Setup Nginx
+#       run: |
+#         cat << EOF > rosti.nginx.conf
+#         server {
+#                 server_name zknihy.rostiapp.cz;
+
+#                 listen       0.0.0.0:8000;
+#                 listen       [::]:8000;
+
+#                 location / {
+#                         proxy_pass         http://127.0.0.1:3000/;
+#                         proxy_redirect     default;
+#                         proxy_set_header   X-Real-IP  \$remote_addr;
+#                         proxy_set_header   Host       \$host;
+#                 }
+#         }
+#         server {
+#                 server_name api-zknihy.rostiapp.cz;
+
+#                 listen       0.0.0.0:8000;
+#                 listen       [::]:8000;
+
+#                 location / {
+#                         proxy_pass         http://127.0.0.1:9000/;
+#                         proxy_redirect     default;
+#                         proxy_set_header   X-Real-IP  \$remote_addr;
+#                         proxy_set_header   Host       \$host;
+#                 }
+#         }
+#         EOF
+#         scp -o UserKnownHostsFile=./known_hosts -P $PORT rosti.nginx.conf $USER@$HOST:/srv/conf/nginx.d/app.conf
+#         rm rosti.nginx.conf
+#     - name: Backend - Copy code
+#       run: |
+#         rsync -ae "ssh -o UserKnownHostsFile=./known_hosts -p $PORT" --delete-after --exclude=.git . $USER@$HOST:/srv/app/
+#     - name: Apply changes
+#       run: |
+#         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl reread
+#         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart api
+#         ssh -o UserKnownHostsFile=./known_hosts -p $PORT $USER@$HOST supervisorctl restart nginx
 
     # - name: Frontend - Copy code
     #   run: |
