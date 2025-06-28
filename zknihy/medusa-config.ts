@@ -8,7 +8,7 @@ module.exports = defineConfig({
     databaseDriverOptions: {
       connection: {
         ssl: {
-          rejectUnauthorized: false
+          rejectUnauthorized: true
         }
       }
     },
